@@ -1,0 +1,307 @@
+---
+title: "Eye-tracking"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+setwd("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking")
+
+library(ggplot2)
+library(tidyverse)
+library(lme4)
+library(MuMIn)
+library(lmerTest)
+library(modelr)
+library(plyr)
+library(stringr)
+library(Metrics)
+library(caret)
+eyetracking_2018_saccades <- read_delim("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/eyetracking_2018_saccades.txt", 
++     "\t", escape_double = FALSE, trim_ws = TRUE)
+
+eyetracking_2018_fixations <- read_delim("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/eyetracking_2018_fixations.txt", 
++     "\t", escape_double = FALSE, trim_ws = TRUE)
+
+eyetracking_2018_samples <- read_delim("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/eyetracking_2018_samples.txt", 
++     "\t", escape_double = FALSE, trim_ws = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+
+
+l1 = read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/PupilsLogs/logfile_1_2_f.csv")
+l2= read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/PupilsLogs/logfile_2_1_f.csv")
+l3 = read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/PupilsLogs/logfile_3_2_f.csv")
+l4 = read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/PupilsLogs/logfile_4_1_F.csv")
+l5 = read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/PupilsLogs/logfile_5_2_m.csv")
+l6 = read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/PupilsLogs/logfile_6_1_m.csv")
+sampleV1 = read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/SamplesV1.csv")
+fixationV1 = read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/FixationsV1.csv")
+saccadeV1 = read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/SaccadesV1.csv")
+
+
+#social engagement 
+#bindiing the logfiles
+logmerge = rbind(l1,l2,l3,l4,l5,l6)
+
+logmerge$X =as.factor(logmerge$X)
+logmerge$X =as.numeric(logmerge$X)
+
+logmerge = dplyr::rename(logmerge, "Trial" = "X")
+logmerge = dplyr::rename(logmerge, "ParticipantID" = "subject")
+
+#make variables with information about the videos
+logmerge$ActorGender = substr(logmerge$video, start = 1, stop = 1)
+logmerge$Direction= substr(logmerge$video, start = 9, stop = 11)
+logmerge$Ostentiveness= substr(logmerge$video, start = 13, stop = 14)
+
+#merge the logs with the datafiles
+sampleV2 = merge(sampleV1,logmerge, by = c("ParticipantID", "Trial"), all = TRUE)
+fixationV2 = merge(fixationV1,logmerge, by = c("ParticipantID", "Trial"), all = TRUE)
+saccadeV2 = merge(saccadeV1,logmerge, by = c("ParticipantID", "Trial"), all = TRUE)
+
+#visual search
+#creating variables with NAs
+sampleV2$Condition = NA
+fixationV2$Condition = NA
+saccadeV2$Condition = NA
+
+#add star to trials of the specific searchorder in the sample data
+sampleV2$Condition[which(sampleV2$SearchOrder== "1" & sampleV2$Trial <= 5)] = "star" 
+sampleV2$Condition[which(sampleV2$SearchOrder== "1" & sampleV2$Trial > 5)] = "count" 
+sampleV2$Condition[which(sampleV2$SearchOrder== "2" & sampleV2$Trial <= 5)] = "count"
+sampleV2$Condition[which(sampleV2$SearchOrder== "2" & sampleV2$Trial > 5)] = "star" 
+
+#add star to trials of the specific searchorder in the fixation data
+fixationV2$Condition[which(fixationV2$SearchOrder== "1" & fixationV2$Trial <= 5)] = "star" 
+fixationV2$Condition[which(fixationV2$SearchOrder== "1" & fixationV2$Trial > 5)] = "count" 
+fixationV2$Condition[which(fixationV2$SearchOrder== "2" & fixationV2$Trial <= 5)] = "count"
+fixationV2$Condition[which(fixationV2$SearchOrder== "2" & fixationV2$Trial > 5)] = "star" 
+
+#add star to trials of the specific searchorder in the saccade data
+saccadeV2$Condition[which(saccadeV2$SearchOrder== "1" & saccadeV2$Trial <= 5)] = "star" 
+saccadeV2$Condition[which(saccadeV2$SearchOrder== "1" & saccadeV2$Trial > 5)] = "count" 
+saccadeV2$Condition[which(saccadeV2$SearchOrder== "2" & saccadeV2$Trial <= 5)] = "count"
+saccadeV2$Condition[which(saccadeV2$SearchOrder== "2" & saccadeV2$Trial > 5)] = "star"
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r}
+
+#plots
+
+Boxplot <- ggplot(fixationV2, aes(ParticipantID, Duration))
+Boxplot + geom_boxplot() + labs(x = "ID", y = "duration") + facet_wrap(~Task)
+
+hist = ggplot(fixationV2, aes(Duration)) + geom_histogram() + facet_wrap (~Task)
+hist
+
+density = ggplot(fixationV2, aes(Duration)) + geom_density() + facet_wrap (~Task)
+density
+
+ggplot(sampleV2, aes(PupilSize)) + geom_density()+ facet_wrap (~Task)
+
+ggplot(sampleV2, aes(PupilSize)) + geom_density(aes(colour = ParticipantID))+ facet_wrap (Saccade~Task)
+
+```
+
+```{r}
+
+#lmer
+library(lme4)
+library(lmerTest)
+
+m1 <-lmer(Amplitude ~ Condition + (1+ Trial|ParticipantID), data = saccadeV2)
+summary(m1)
+
+m2 <-lmer(Duration ~ Condition + (1+ Trial|ParticipantID), data = fixationV2)
+summary(m2)
+
+m3 <-lmer(PeakVelocity ~ Condition + (1+ Trial|ParticipantID), data = saccadeV2)
+summary(m3)
+
+m4 <-lmer(Duration ~ Condition + (1+ Trial|ParticipantID), data = saccadeV2)
+summary(m4)
+
+m5 <-lmer(Fixation ~ Condition + (1+ Trial|ParticipantID), data = fixationV2)
+summary(m5)
+
+m6 <-lmer(Duration ~ Condition *SearchOrder*Fixation*Trial (1+ Condition|ParticipantID), data = fixationV2)
+summary(m6)
+
+#interactioN:
+#NOT IMPORTANT: search order does not change for one participant, but for the different searchorders we expect the data to change
+#CRUCIAL: systematic effect/fixation within the trial, "drift"
+#NOT IMPORTANT: systematic changes for the fixations within the trial, temporal effect
+#TOO COMPLEX
+
+m7 <-lmer(Duration ~ Condition*Trial + (1+ Condition*Trial|ParticipantID), data = fixationV2, family= gaussian(link= log))
+summary(m7)
+#should we keep the interaction
+
+```
+```{r}
+library(caret)
+library(Metrics)
+
+
+
+?createFolds
+
+data = subset(fixationV2,  Task =="VisualSearch")
+
+data$ParticipantID =as.factor(data$ParticipantID)
+data$folds_id = as.numeric(data$ParticipantID)
+flds <- createFolds(unique(data$ParticipantID), k = 3)
+
+test_rmse =NULL
+train_rmse = NULL
+n =1
+
+for(i in flds){ 
+  
+  #test
+  testsub =subset(data,folds_id %in% i)
+  #train
+  trainsub = subset(data,!(folds_id %in% i))
+  #train the model (the function you should have made)
+  trainmodel =glmer(Duration ~ Condition * Trial+ (1+Condition*Trial|ParticipantID), data = trainsub, family= gaussian(link= log))
+  #save performance of the model (rmse() + predict() )
+  pred = predict(trainmodel, testsub, allow.new.levels = T)
+  test_rmse[n] =Metrics::rmse(testsub$Duration, pred) 
+  train_rmse[n]= Metrics::rmse(trainsub$Duration, fitted(trainmodel)) 
+  n= n+1
+}
+
+# for the model trainmodel =lmer(Duration ~ Condition * Trial +(1+Condition * Trial|ParticipantID), data = trainsub, REML = F)
+CiTtest =mean(test_rmse) #209.5599
+CiTtrain =mean(train_rmse) #194.1785
+
+# for the model trainmodel =lmer(Duration ~ Condition + Trial +(1+Condition + Trial|ParticipantID), data = trainsub, REML = F)
+CogTtest = mean(test_rmse) #212.1049
+CogTtrain =mean(train_rmse) #194.5654
+
+# for the model trainmodel =lmer(Duration ~ Condition +(1+Condition |ParticipantID), data = trainsub, REML = F)
+Contest = mean(test_rmse) #213.4577
+Contrain = mean(train_rmse) #194.9511
+
+#for the model:trainmodel =glmer(Duration ~ Condition + (1+Condition|ParticipantID), data = trainsub, family= gaussian(link= log))
+withlog =mean(test_rmse) #355.8443
+withlog = mean(train_rmse) #194.3531
+
+```
+
+```{r}
+#Social engagement
+
+#using sampleV2
+lmer(PupilSize ~ Ostentiveness + Direction + ActorGender+ Trial+ TrialTime + ParticipantGender + TrialTime^2 + TrialTime^3 (1+Trial +TrialTime+ Ostentiveness +Direction|ParticipantID))
+#pupilsize is changed from grey screen to video 
+#interaction between gender of the participant and the actor: preferences -> big effect, not preference = smaller effect
+#interaction between Ost and direction: if the actor is looking at you it may influence you direction - not looking, also influence
+
+lmer(PupilSize ~ Direction*Ostentiveness*(TrialTime + TrialTime^2 +TrialTime^3)+ActorGender*ParticipantGender*(TrialTime + TrialTime^2 +TrialTime^3)+ Trial)
+#do we need this?
+#mcuh data and computer power
+#TT^2 and 3 allows for the curve to have a point of flextion
+
+#basic model:
+lmer(PupilSize ~ Direction*Ostentiveness*(TrialTime + TrialTime^2 +TrialTime^3))
+#first only TT, then by TT+TT2 , then by TT+TT2+TT3
+
+
+```
+
+
+```{r}
+#visualization
+# Growth plot
+# 
+# Fixation duration = heatmaps
+# sampling amplitude = scanpath
+
+#headmaps: github: https://gist.github.com/kalebr/6832380
+#plotting coordinate x on the x-axis, coordinate y on the y-axis
+#the density give the heat (colours)
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+library(jpeg)
+library(grid)
+#reading the picture into a 
+img <- readJPEG('~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/eyetrackingscripts/foraging/ng021ws.jpg')
+#making the image readable
+g <- rasterGrob(img, interpolate=TRUE)
+
+#density for star
+ggplot(subset(fixationV2, Task=='VisualSearch' & ParticipantID=='1_1_f1' & Trial==1), aes(x = PositionX, y = 1081-PositionY)) +
+xlim(0,1920) +
+ylim(0, 1080) +
+annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) + #xmin=-Inf, xmax=Inf, ymin=-Inf, ymax=Inf) +
+  #raster could be tile or point 
+  #the colour fill depends on the density in that specific bin
+stat_density2d(geom="raster", aes(fill=..density.., alpha=sqrt(sqrt(..density..))), contour=FALSE, n=1000) + 
+  #scale fill gradient distribute the colours to different density (10 different shades for colour)
+scale_alpha(range = c(0.1, 0.6)) + scale_fill_gradientn(colours = jet.colors(10), trans="sqrt")
+
+
+img1 <- readJPEG('~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/eyetrackingscripts/foraging/ng090ws.jpg')
+#making the image readable
+g1 <- rasterGrob(img1, interpolate=TRUE)
+
+#density for count
+ggplot(subset(fixationV2, Task=='VisualSearch' & ParticipantID=='5_1_m2' & Trial==1), aes(x = PositionX, y = 1081-PositionY)) +
+xlim(0,1920) +
+ylim(0, 1080) +
+annotation_custom(g1, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) + #xmin=-Inf, xmax=Inf, ymin=-Inf, ymax=Inf) +
+  #raster could be tile or point 
+  #the colour fill depends on the density in that specific bin
+stat_density2d(geom="raster", aes(fill=..density.., alpha=sqrt(sqrt(..density..))), contour=FALSE, n=1000) + 
+  #scale fill gradient distribute the colours to different density (10 different shades for colour)
+scale_alpha(range = c(0.1, 0.6)) + scale_fill_gradientn(colours = jet.colors(10), trans="sqrt")
+
+
+```
+
+
+```{r}
+#scanpath
+
+x= subset(fixationV2, Task=='VisualSearch' & ParticipantID=='1_1_f1' & Trial==1)
+x= x[order(x$Fixation),]
+ggplot(x, aes(x = PositionX, y = 1081-PositionY, label = Fixation)) +
+  #making size = x$duration/100 or x$Duration/sqrt(x$Duration) make the fixation larger depending on duration
+  annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  geom_point(size =x$Duration/100, alpha = 0.5) +
+  geom_path(size =1, alpha = 0.3) +
+  geom_text(aes(label = Fixation, size = 5))
+
+x1= subset(fixationV2, Task=='VisualSearch' & ParticipantID=='5_1_m2' & Trial==1)
+x1= x1[order(x$Fixation),]
+ggplot(x1, aes(x = PositionX, y = 1081-PositionY, label = Fixation)) +
+  annotation_custom(g1, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  geom_point(size = 5, alpha = 0.5) +
+  geom_path(size =1, alpha = 0.3) +
+  geom_text(aes(label = Fixation, size = 5))
+
+```
+
+```{r}
+
+#pupil size
+#group by = direction and ostentiveness
+pupil = ggplot(subset(sampleV2, Task =="SocialEngagement"), aes(x = TrialTime, y = PupilSize))
+pupil + geom_smooth(colour =Direction) + facet_grid(~Ostensiveness)
+
+
+```
