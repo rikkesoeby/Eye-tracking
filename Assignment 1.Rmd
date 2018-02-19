@@ -1,0 +1,244 @@
+---
+title: "Assignment 1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+l1 = read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/PupilsLogs/logfile_1_2_f.csv")
+l2= read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/PupilsLogs/logfile_2_1_f.csv")
+l3 = read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/PupilsLogs/logfile_3_2_f.csv")
+l4 = read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/PupilsLogs/logfile_4_1_F.csv")
+l5 = read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/PupilsLogs/logfile_5_2_m.csv")
+l6 = read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/PupilsLogs/logfile_6_1_m.csv")
+sampleV1 = read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/SamplesV1.csv")
+fixationV1 = read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/FixationsV1.csv")
+saccadeV1 = read.csv("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/SaccadesV1.csv")
+
+SamplesV2 = read.csv("~/Desktop/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/SamplesV2.csv")
+
+#social engagement 
+#bindiing the logfiles
+logmerge = rbind(l1,l2,l3,l4,l5,l6)
+
+logmerge$X =as.factor(logmerge$X)
+logmerge$X =as.numeric(logmerge$X)
+
+logmerge = dplyr::rename(logmerge, "Trial" = "X")
+logmerge = dplyr::rename(logmerge, "ParticipantID" = "subject")
+
+#make variables with information about the videos
+logmerge$ActorGender = substr(logmerge$video, start = 1, stop = 1)
+logmerge$Direction= substr(logmerge$video, start = 9, stop = 11)
+logmerge$Ostentiveness= substr(logmerge$video, start = 13, stop = 14)
+
+#merge the logs with the datafiles
+sampleV2 = merge(sampleV1,logmerge, by = c("ParticipantID", "Trial"), all = TRUE)
+fixationV2 = merge(fixationV1,logmerge, by = c("ParticipantID", "Trial"), all = TRUE)
+saccadeV2 = merge(saccadeV1,logmerge, by = c("ParticipantID", "Trial"), all = TRUE)
+
+#visual search
+#creating variables with NAs
+sampleV2$Condition = NA
+fixationV2$Condition = NA
+saccadeV2$Condition = NA
+
+#add star to trials of the specific searchorder in the sample data
+sampleV2$Condition[which(sampleV2$SearchOrder== "1" & sampleV2$Trial <= 5)] = "star" 
+sampleV2$Condition[which(sampleV2$SearchOrder== "1" & sampleV2$Trial > 5)] = "count" 
+sampleV2$Condition[which(sampleV2$SearchOrder== "2" & sampleV2$Trial <= 5)] = "count"
+sampleV2$Condition[which(sampleV2$SearchOrder== "2" & sampleV2$Trial > 5)] = "star" 
+
+#add star to trials of the specific searchorder in the fixation data
+fixationV2$Condition[which(fixationV2$SearchOrder== "1" & fixationV2$Trial <= 5)] = "star" 
+fixationV2$Condition[which(fixationV2$SearchOrder== "1" & fixationV2$Trial > 5)] = "count" 
+fixationV2$Condition[which(fixationV2$SearchOrder== "2" & fixationV2$Trial <= 5)] = "count"
+fixationV2$Condition[which(fixationV2$SearchOrder== "2" & fixationV2$Trial > 5)] = "star" 
+
+#add star to trials of the specific searchorder in the saccade data
+saccadeV2$Condition[which(saccadeV2$SearchOrder== "1" & saccadeV2$Trial <= 5)] = "star" 
+saccadeV2$Condition[which(saccadeV2$SearchOrder== "1" & saccadeV2$Trial > 5)] = "count" 
+saccadeV2$Condition[which(saccadeV2$SearchOrder== "2" & saccadeV2$Trial <= 5)] = "count"
+saccadeV2$Condition[which(saccadeV2$SearchOrder== "2" & saccadeV2$Trial > 5)] = "star"
+
+```
+
+
+
+```{r cars}
+#cross validation of visual task
+
+data = subset(fixationV2,  Task =="VisualSearch")
+
+data$ParticipantID = as.character(data$ParticipantID)
+data$ParticipantID =as.factor(data$ParticipantID)
+data$folds_id = as.numeric(data$ParticipantID)
+flds <- createFolds(unique(data$ParticipantID), k = 3)
+
+test_rmse =NULL
+train_rmse = NULL
+n =1
+
+for(i in flds){ 
+  
+  #test
+  testsub =subset(data,folds_id %in% i)
+  #train
+  trainsub = subset(data,!(folds_id %in% i))
+  #train the model (the function you should have made)
+  trainmodel =glmer(Duration ~ Condition * Trial + (1+Condition*Trial|ParticipantID), data = trainsub)
+  #save performance of the model (rmse() + predict() )
+  pred = predict(trainmodel, testsub, allow.new.levels = T)
+  test_rmse[n] =Metrics::rmse(testsub$Duration, pred) 
+  train_rmse[n]= Metrics::rmse(trainsub$Duration, fitted(trainmodel)) 
+  n= n+1
+}
+
+# for the model trainmodel =lmer(Duration ~ Condition * Trial +(1+Condition * Trial|ParticipantID), data = trainsub, REML = F)
+CiTtest =mean(test_rmse) #209.5599
+CiTtrain =mean(train_rmse) #194.1785
+
+# for the model trainmodel =lmer(Duration ~ Condition + Trial +(1+Condition + Trial|ParticipantID), data = trainsub, REML = F)
+CogTtest = mean(test_rmse) #212.1049
+CogTtrain =mean(train_rmse) #194.5654
+
+# for the model trainmodel =lmer(Duration ~ Condition + (1+Condition |ParticipantID), data = trainsub, REML = F)
+Contest = mean(test_rmse) #213.4577
+Contrain = mean(train_rmse) #194.9511
+
+
+#Best model: 
+model1 =lmer(Duration ~ Condition * Trial + (1+Condition*Trial|ParticipantID), data)
+summary(model1)
+```
+
+```{r}
+
+#plot for visual search
+
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+library(jpeg)
+library(grid)
+#reading the picture into a 
+img <- readJPEG("~/Desktop/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/eyetrackingscripts/foraging/ng021ws.jpg")
+#making the image readable
+g <- rasterGrob(img, interpolate=TRUE)
+
+#heatmap for star
+ggplot(subset(fixationV2, Task=='VisualSearch' & ParticipantID=='1_1_f1' & Trial==1), aes(x = PositionX, y = 1081-PositionY)) +
+xlim(0,1920) +
+ylim(0, 1080) +
+annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) + #xmin=-Inf, xmax=Inf, ymin=-Inf, ymax=Inf) +
+  #raster could be tile or point 
+  #the colour fill depends on the density in that specific bin
+stat_density2d(geom="raster", aes(fill=..density.., alpha=sqrt(sqrt(..density..))), contour=FALSE, n=1000) + 
+  #scale fill gradient distribute the colours to different density (10 different shades for colour)
+scale_alpha(range = c(0.1, 0.6)) + scale_fill_gradientn(colours = jet.colors(10), trans="sqrt")
+
+#heatmap for count
+img1 <- readJPEG("~/Desktop/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/eyetrackingscripts/foraging/ng120ws.jpg")
+#making the image readable
+g1 <- rasterGrob(img1, interpolate=TRUE)
+
+ggplot(subset(fixationV2, Task=='VisualSearch' & ParticipantID=='5_1_m2' & Trial==2), aes(x = PositionX, y = 1081-PositionY)) +
+  xlim(0,1920) +
+  ylim(0,1080) +
+  annotation_custom(g1, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  stat_density2d(geom="raster", aes(fill=..density.., alpha=sqrt(sqrt(..density..))), contour=FALSE, n=1000) + 
+  scale_alpha(range = c(0.1, 0.6)) + scale_fill_gradientn(colours = jet.colors(10), trans="sqrt")
+
+
+#scanpath for star
+x= subset(fixationV2, Task=='VisualSearch' & ParticipantID=='1_1_f1' & Trial==1)
+x= x[order(x$Fixation),]
+ggplot(x, aes(x = PositionX, y = 1081-PositionY, label = Fixation)) +
+  #making size = x$duration/100 or x$Duration/sqrt(x$Duration) make the fixation larger depending on duration
+  annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  geom_point(size =x$Duration/100, color ="red") +
+  geom_path(size =1, alpha = 0.3, color ="red") +
+  geom_text(aes(label = Fixation, size = 5))
+
+#scanpath for count
+x1= subset(fixationV2, Task=='VisualSearch' & ParticipantID=='5_1_m2' & Trial==2)
+x1= x1[order(x1$Fixation),]
+ggplot(x1, aes(x = PositionX, y = 1081-PositionY, label = Fixation)) +
+  annotation_custom(g1, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  geom_point(size = x1$Duration/100, color ="red") +
+  geom_path(size =1, alpha = 0.3, color ="red") +
+  geom_text(aes(label = Fixation, size = 5))
+```
+
+```{r}
+#Social engagement
+
+datasoc = subset(sampleV2,  Task =="SocialEngagement" & Fixation == "1")
+
+datasoc$ParticipantID = as.character(datasoc$ParticipantID)
+datasoc$ParticipantID =as.factor(datasoc$ParticipantID)
+datasoc$folds_id = as.numeric(datasoc$ParticipantID)
+flds <- createFolds(unique(datasoc$ParticipantID), k = 3)
+
+test_rmse =NULL
+train_rmse = NULL
+n =1
+
+for(i in flds){ 
+  
+  #test
+  testsub =subset(datasoc,folds_id %in% i)
+  #train
+  trainsub = subset(datasoc,!(folds_id %in% i))
+  #train the model (the function you should have made)
+  trainmodel = lmer(PupilSize ~ Direction*Ostentiveness*TrialTime + (1+Direction*Ostentiveness*TrialTime|ParticipantID), data =trainsub)
+  #save performance of the model (rmse() + predict() )
+  pred = predict(trainmodel, testsub, allow.new.levels = T)
+  test_rmse[n] =Metrics::rmse(testsub$PupilSize, pred) 
+  train_rmse[n]= Metrics::rmse(trainsub$PupilSize, fitted(trainmodel)) 
+  n= n+1
+}
+#the model: lmer(PupilSize ~ Direction*Ostentiveness*(TrialTime + TrialTime^2 +TrialTime^3) + (1+Direction*Ostentiveness*(TrialTime + TrialTime^2 +TrialTime^3)|ParticipantID)
+TT3test =mean(test_rmse) #545.47
+TT3train =mean(train_rmse) # 91.5
+
+
+#the model: lmer(PupilSize ~ Direction*Ostentiveness*(TrialTime + TrialTime^2) + (1+Direction*Ostentiveness*(TrialTime + TrialTime^2)|ParticipantID)
+TT2test = mean(test_rmse) #514.54
+TT2train = mean(train_rmse) #87.2
+
+#the model: lmer(PupilSize ~ Direction*Ostentiveness*TrialTime + (1+Direction*Ostentiveness*TrialTime|ParticipantID)
+TTtest = mean(test_rmse) #651.87
+TTtrain = mean(train_rmse) #88.84
+
+#best model
+socmodel =lmer(PupilSize ~ Direction*Ostentiveness*(TrialTime + TrialTime^2) + (1+Direction*Ostentiveness*(TrialTime + TrialTime^2)|ParticipantID), data =datasoc)
+summary(socmodel)
+
+```
+
+
+```{r}
+#growth curve
+ggplot(subset(SamplesV2, Task == "SocialEngagement"), aes(x=TrialTime, y = PupilSize))+ geom_smooth(aes(color = ParticipantGender))+ facet_grid(Directionality~Ostension)
+
+#scanpath direct + ostensiveness
+soc= subset(fixationV2, Task=='SocialEngagement' & ParticipantID=='3_2_f' & video=="m_pl_o1_dir_+o")
+soc= soc[order(soc$Fixation),]
+ggplot(soc, aes(x = PositionX, y = 1081-PositionY, label = Fixation)) +
+  #making size = x$duration/100 or x$Duration/sqrt(x$Duration) make the fixation larger depending on duration
+  geom_point(size =soc$Duration/100, color ="red") +
+  geom_path(size =1, alpha = 0.3, color ="red") +
+  geom_text(aes(label = Fixation, size = 5))
+
+
+#scan path direct - ostensiveness
+soc1= subset(fixationV2, Task=='SocialEngagement' & ParticipantID=='3_2_f' & video=="m_pl_o1_dir_-o")
+soc1= soc1[order(soc1$Fixation),]
+ggplot(soc1, aes(x = PositionX, y = 1081-PositionY, label = Fixation)) +
+  #making size = x$duration/100 or x$Duration/sqrt(x$Duration) make the fixation larger depending on duration
+  geom_point(size =soc1$Duration/100, color ="red") +
+  geom_path(size =1, alpha = 0.3, color ="red") +
+  geom_text(aes(label = Fixation, size = 5))
+
+```

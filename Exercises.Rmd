@@ -18,14 +18,14 @@ library(plyr)
 library(stringr)
 library(Metrics)
 library(caret)
-eyetracking_2018_saccades <- read_delim("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/eyetracking_2018_saccades.txt", 
-+     "\t", escape_double = FALSE, trim_ws = TRUE)
-
-eyetracking_2018_fixations <- read_delim("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/eyetracking_2018_fixations.txt", 
-+     "\t", escape_double = FALSE, trim_ws = TRUE)
-
-eyetracking_2018_samples <- read_delim("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/eyetracking_2018_samples.txt", 
-+     "\t", escape_double = FALSE, trim_ws = TRUE)
+# eyetracking_2018_saccades <- read_delim("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/eyetracking_2018_saccades.txt", 
+# +     "\t", escape_double = FALSE, trim_ws = TRUE)
+# 
+# eyetracking_2018_fixations <- read_delim("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/eyetracking_2018_fixations.txt", 
+# +     "\t", escape_double = FALSE, trim_ws = TRUE)
+# 
+# eyetracking_2018_samples <- read_delim("~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/eyetracking_2018_samples.txt", 
+# +     "\t", escape_double = FALSE, trim_ws = TRUE)
 ```
 
 ## R Markdown
@@ -120,8 +120,6 @@ ggplot(sampleV2, aes(PupilSize)) + geom_density(aes(colour = ParticipantID))+ fa
 ```{r}
 
 #lmer
-library(lme4)
-library(lmerTest)
 
 m1 <-lmer(Amplitude ~ Condition + (1+ Trial|ParticipantID), data = saccadeV2)
 summary(m1)
@@ -138,7 +136,7 @@ summary(m4)
 m5 <-lmer(Fixation ~ Condition + (1+ Trial|ParticipantID), data = fixationV2)
 summary(m5)
 
-m6 <-lmer(Duration ~ Condition *SearchOrder*Fixation*Trial (1+ Condition|ParticipantID), data = fixationV2)
+m6 <-lmer(Duration ~ Condition *SearchOrder*Fixation*Trial+ (1+ Condition|ParticipantID), data = fixationV2)
 summary(m6)
 
 #interactioN:
@@ -147,21 +145,24 @@ summary(m6)
 #NOT IMPORTANT: systematic changes for the fixations within the trial, temporal effect
 #TOO COMPLEX
 
-m7 <-lmer(Duration ~ Condition*Trial + (1+ Condition*Trial|ParticipantID), data = fixationV2, family= gaussian(link= log))
+m7 <-lmer(Duration ~ Condition*Trial + (1+ Condition*Trial|ParticipantID), data = fixationV2)
 summary(m7)
 #should we keep the interaction
 
 ```
+
+
+
+
 ```{r}
 library(caret)
 library(Metrics)
 
-
-
-?createFolds
+#cross validation of visual task
 
 data = subset(fixationV2,  Task =="VisualSearch")
 
+data$ParticipantID = as.character(data$ParticipantID)
 data$ParticipantID =as.factor(data$ParticipantID)
 data$folds_id = as.numeric(data$ParticipantID)
 flds <- createFolds(unique(data$ParticipantID), k = 3)
@@ -177,7 +178,7 @@ for(i in flds){
   #train
   trainsub = subset(data,!(folds_id %in% i))
   #train the model (the function you should have made)
-  trainmodel =glmer(Duration ~ Condition * Trial+ (1+Condition*Trial|ParticipantID), data = trainsub, family= gaussian(link= log))
+  trainmodel =glmer(Duration ~ Condition * Trial + (1+Condition*Trial|ParticipantID), data = trainsub)
   #save performance of the model (rmse() + predict() )
   pred = predict(trainmodel, testsub, allow.new.levels = T)
   test_rmse[n] =Metrics::rmse(testsub$Duration, pred) 
@@ -193,18 +194,71 @@ CiTtrain =mean(train_rmse) #194.1785
 CogTtest = mean(test_rmse) #212.1049
 CogTtrain =mean(train_rmse) #194.5654
 
-# for the model trainmodel =lmer(Duration ~ Condition +(1+Condition |ParticipantID), data = trainsub, REML = F)
+# for the model trainmodel =lmer(Duration ~ Condition + (1+Condition |ParticipantID), data = trainsub, REML = F)
 Contest = mean(test_rmse) #213.4577
 Contrain = mean(train_rmse) #194.9511
 
 #for the model:trainmodel =glmer(Duration ~ Condition + (1+Condition|ParticipantID), data = trainsub, family= gaussian(link= log))
-withlog =mean(test_rmse) #355.8443
-withlog = mean(train_rmse) #194.3531
+# withlog =mean(test_rmse) #355.8443
+# withlog = mean(train_rmse) #194.3531
+
+
+#best model
+model1 =lmer(Duration ~ Condition * Trial + (1+Condition*Trial|ParticipantID), data)
+summary(model1)
 
 ```
 
+
 ```{r}
 #Social engagement
+
+datasoc = subset(sampleV2,  Task =="SocialEngagement" & Fixation == "1")
+
+datasoc$ParticipantID = as.character(datasoc$ParticipantID)
+datasoc$ParticipantID =as.factor(datasoc$ParticipantID)
+datasoc$folds_id = as.numeric(datasoc$ParticipantID)
+flds <- createFolds(unique(datasoc$ParticipantID), k = 3)
+
+test_rmse =NULL
+train_rmse = NULL
+n =1
+
+for(i in flds){ 
+  
+  #test
+  testsub =subset(datasoc,folds_id %in% i)
+  #train
+  trainsub = subset(datasoc,!(folds_id %in% i))
+  #train the model (the function you should have made)
+  trainmodel = lmer(PupilSize ~ Direction*Ostentiveness*TrialTime + (1+Direction*Ostentiveness*TrialTime|ParticipantID), data =trainsub)
+  #save performance of the model (rmse() + predict() )
+  pred = predict(trainmodel, testsub, allow.new.levels = T)
+  test_rmse[n] =Metrics::rmse(testsub$PupilSize, pred) 
+  train_rmse[n]= Metrics::rmse(trainsub$PupilSize, fitted(trainmodel)) 
+  n= n+1
+}
+#the model: lmer(PupilSize ~ Direction*Ostentiveness*(TrialTime + TrialTime^2 +TrialTime^3) + (1+Direction*Ostentiveness*(TrialTime + TrialTime^2 +TrialTime^3)|ParticipantID)
+TT3test =mean(test_rmse) #545.47
+TT3train =mean(train_rmse) # 91.5
+
+
+#the model: lmer(PupilSize ~ Direction*Ostentiveness*(TrialTime + TrialTime^2) + (1+Direction*Ostentiveness*(TrialTime + TrialTime^2)|ParticipantID)
+TT2test = mean(test_rmse) #514.54
+TT2train = mean(train_rmse) #87.2
+
+#the model: lmer(PupilSize ~ Direction*Ostentiveness*TrialTime + (1+Direction*Ostentiveness*TrialTime|ParticipantID)
+TTtest = mean(test_rmse) #651.87
+TTtrain = mean(train_rmse) #88.84
+
+#best model
+socmodel =lmer(PupilSize ~ Direction*Ostentiveness*(TrialTime + TrialTime^2) + (1+Direction*Ostentiveness*(TrialTime + TrialTime^2)|ParticipantID), data =datasoc)
+summary(socmodel)
+
+```
+
+
+```{r}
 
 #using sampleV2
 lmer(PupilSize ~ Ostentiveness + Direction + ActorGender+ Trial+ TrialTime + ParticipantGender + TrialTime^2 + TrialTime^3 (1+Trial +TrialTime+ Ostentiveness +Direction|ParticipantID))
@@ -214,18 +268,16 @@ lmer(PupilSize ~ Ostentiveness + Direction + ActorGender+ Trial+ TrialTime + Par
 
 lmer(PupilSize ~ Direction*Ostentiveness*(TrialTime + TrialTime^2 +TrialTime^3)+ActorGender*ParticipantGender*(TrialTime + TrialTime^2 +TrialTime^3)+ Trial)
 #do we need this?
-#mcuh data and computer power
+#much data and computer power
 #TT^2 and 3 allows for the curve to have a point of flextion
 
 #basic model:
-lmer(PupilSize ~ Direction*Ostentiveness*(TrialTime + TrialTime^2 +TrialTime^3))
+lmer(PupilSize ~ Direction*Ostentiveness*(TrialTime + TrialTime^2 +TrialTime^3) + (1+Direction*Ostentiveness*(TrialTime + TrialTime^2 +TrialTime^3)|ParticipantID) , data =datasoc) 
 #first only TT, then by TT+TT2 , then by TT+TT2+TT3
+summary()
 
 
-```
 
-
-```{r}
 #visualization
 # Growth plot
 # 
@@ -239,7 +291,7 @@ jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F"
 library(jpeg)
 library(grid)
 #reading the picture into a 
-img <- readJPEG('~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/eyetrackingscripts/foraging/ng021ws.jpg')
+img <- readJPEG("~/Desktop/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/eyetrackingscripts/foraging/ng021ws.jpg")
 #making the image readable
 g <- rasterGrob(img, interpolate=TRUE)
 
@@ -255,7 +307,7 @@ stat_density2d(geom="raster", aes(fill=..density.., alpha=sqrt(sqrt(..density..)
 scale_alpha(range = c(0.1, 0.6)) + scale_fill_gradientn(colours = jet.colors(10), trans="sqrt")
 
 
-img1 <- readJPEG('~/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/eyetrackingscripts/foraging/ng090ws.jpg')
+img1 <- readJPEG("~/Desktop/Documents/Cognitive Science 4. semester/Eye-tracking/2018 - Eye tracking/eyetrackingscripts/foraging/ng090ws.jpg")
 #making the image readable
 g1 <- rasterGrob(img1, interpolate=TRUE)
 
@@ -275,23 +327,23 @@ scale_alpha(range = c(0.1, 0.6)) + scale_fill_gradientn(colours = jet.colors(10)
 
 
 ```{r}
-#scanpath
+#scanpaths for visual search
 
 x= subset(fixationV2, Task=='VisualSearch' & ParticipantID=='1_1_f1' & Trial==1)
 x= x[order(x$Fixation),]
 ggplot(x, aes(x = PositionX, y = 1081-PositionY, label = Fixation)) +
   #making size = x$duration/100 or x$Duration/sqrt(x$Duration) make the fixation larger depending on duration
   annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
-  geom_point(size =x$Duration/100, alpha = 0.5) +
-  geom_path(size =1, alpha = 0.3) +
+  geom_point(size =x$Duration/100, color ="red") +
+  geom_path(size =1, alpha = 0.3, color ="red") +
   geom_text(aes(label = Fixation, size = 5))
 
 x1= subset(fixationV2, Task=='VisualSearch' & ParticipantID=='5_1_m2' & Trial==1)
-x1= x1[order(x$Fixation),]
+x1= x1[order(x1$Fixation),]
 ggplot(x1, aes(x = PositionX, y = 1081-PositionY, label = Fixation)) +
   annotation_custom(g1, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
-  geom_point(size = 5, alpha = 0.5) +
-  geom_path(size =1, alpha = 0.3) +
+  geom_point(size = x1$Duration/100, color ="red") +
+  geom_path(size =1, alpha = 0.3, color ="red") +
   geom_text(aes(label = Fixation, size = 5))
 
 ```
@@ -301,7 +353,5 @@ ggplot(x1, aes(x = PositionX, y = 1081-PositionY, label = Fixation)) +
 #pupil size
 #group by = direction and ostentiveness
 pupil = ggplot(subset(sampleV2, Task =="SocialEngagement"), aes(x = TrialTime, y = PupilSize))
-pupil + geom_smooth(colour =Direction) + facet_grid(~Ostensiveness)
-
-
+pupil + geom_smooth(colour="Direction") + facet_grid(~Ostensiveness)
 ```
